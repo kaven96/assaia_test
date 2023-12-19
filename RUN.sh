@@ -46,10 +46,10 @@ polygon_path=$2
 output_path=$3
 
 # Run the detection script
-python3 detect.py "$video_path" "$polygon_path"
+python3 detect5.py "$video_path" "$polygon_path"
 
 # Run the evaluation script
-python3 evaluate.py 'time_intervals.json' 'output_result.json' "$video_path"
+python3 evaluate.py 'time_intervals.json' 'output_result.json' "$video_path"  
 
 # Move the final output to the specified output path
 mv 'output_result.json' "$output_path"

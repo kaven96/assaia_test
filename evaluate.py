@@ -10,32 +10,28 @@ def calculate_metrics(ground_truth, predictions):
     for video_name, gt_intervals in ground_truth.items():
         pred_intervals = predictions.get(video_name, [])
 
-        for pred_interval in pred_intervals:
+        # Calculate true positives
+        for gt_interval in gt_intervals:
             found_match = False
 
-            for gt_interval in gt_intervals:
-                if (
-                    pred_interval[0] <= gt_interval[1]
-                    and pred_interval[1] >= gt_interval[0]
-                ):
-                    tp += 1
+            for pred_interval in pred_intervals:
+                intersection_start = max(pred_interval[0], gt_interval[0])
+                intersection_end = min(pred_interval[1], gt_interval[1])
+
+                if intersection_start <= intersection_end:
+                    tp += intersection_end - intersection_start
                     found_match = True
                     break
 
             if not found_match:
-                fp += 1
+                fn += gt_interval[1] - gt_interval[0]
 
-        fn += len(
-            [
-                1
-                for gt_interval in gt_intervals
-                if not any(
-                    pred_interval[0] <= gt_interval[1]
-                    and pred_interval[1] >= gt_interval[0]
-                    for pred_interval in pred_intervals
-                )
-            ]
-        )
+        # Calculate false positives
+        fp += sum(pred_interval[1] - pred_interval[0] for pred_interval in pred_intervals if all(
+            pred_interval[0] > gt_interval[1] or pred_interval[1] < gt_interval[0]
+            for gt_interval in gt_intervals
+        ))
+
 
     return tp, fp, fn
 
@@ -83,7 +79,7 @@ def evaluate_predictions(ground_truth_file, predictions_file):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 3:
         print(
             "Usage: python evaluate_intervals.py <ground_truth_file> <predictions_file>"
         )
@@ -91,14 +87,14 @@ if __name__ == "__main__":
 
     ground_truth_file = sys.argv[1]
     predictions_file = sys.argv[2]
-    video_name = sys.argv[3]
-    video_name = os.path.basename(video_name)
+    # video_name = sys.argv[3]
+    # video_name = os.path.basename(video_name)
 
     precision, recall, accuracy, f1 = evaluate_predictions(
         ground_truth_file, predictions_file
     )
 
-    with open(f"metrics_{video_name}.txt", "w") as f:
+    with open(f"metrics_all.txt", "w") as f:
         f.write(f"Precision: {precision}")
         f.write("\n")
         f.write(f"Recall: {recall}")
