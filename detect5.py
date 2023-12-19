@@ -32,10 +32,10 @@ class VehicleDetector:
     def load_video(self):
         self.cap = cv2.VideoCapture(self.video_name)
 
-    def load_cascade(self):
-        self.car_cascade = cv2.CascadeClassifier(self.cascade_path)
-
     def load_polygons(self):
+        """
+        Read polygon coordinates and store as pts_int
+        """
         video_name = os.path.basename(self.video_name)
         with open(self.polygons_path, "r") as json_file:
             self.polygons = json.load(json_file)
@@ -45,6 +45,9 @@ class VehicleDetector:
         self.pts_int = pts.astype(np.int32)
 
     def export_time_ranges(self):
+        """
+        Export time_ranges dict to json
+        """
         video_name = os.path.basename(self.video_name)
         result_dict = {}
         if video_name not in result_dict:
@@ -53,13 +56,29 @@ class VehicleDetector:
         for _, interval in self.time_ranges.items():
             result_dict[video_name].append([interval["start"], interval["end"]])
 
-        merged_intervals = merge_intervals(result_dict[video_name])
+        merged_intervals = merge_intervals(
+            result_dict[video_name]
+        )  # glue intervals like [18,20], [20, 35] together
+
         result_dict[video_name] = merged_intervals
 
-        with open("output_result.json", "w") as json_file:
+        with open(
+            "output_result.json", "w"
+        ) as json_file:  # output_results.json name is hardcoded, workaround is in bash script
             json.dump(result_dict, json_file)
 
     def xyxy_to_xywh(self, xyxy):
+        """
+        Convert bounding box with coordinates (x1, y1, x2, y2) to bbox (x, y, w, h)
+        Where x1 --- left vertical border coordinate
+              x2 --- right vertical border coordinate
+              y1 --- top horizontal border coordinate
+              y2 --- bottom horizpntal border coordinate
+
+              x, y --- top left corner of rectangle coordinates
+              w --- width of the rectangle
+              h --- height of the rectangle
+        """
         x_min, y_min, x_max, y_max = xyxy
         width = x_max - x_min
         height = y_max - y_min
@@ -69,6 +88,25 @@ class VehicleDetector:
         return x_center, y_center, width, height
 
     def detect_vehicles(self):
+        """
+        The main function for moving objects detection.
+
+        The main idea here is to use Background Substraction method.
+
+        It works as following:
+
+        For each frame of the video:
+        1. Calculate background and foreground mask using 2 last frames
+        2. Apply erosion and dilation operations on foreground mask. Erosion suppresses thin lines,
+           dilation makes lines that left thicker.
+        3. Find all closed contours on the image
+        4. For each contour with bbox with area > 2000 pixels (hyperparameter depending on video
+           resolution and distance from camera to object):
+                a. check, if object is inside polygon
+                b. check if object was in polygon earlier, if yes --- move end_frame to the current frame
+                   if no, add current frame_number to time_ranges dict as start_frame
+                c. add current object to temporary list track_boxes
+        """
         track_boxes = []
 
         while True:
@@ -76,13 +114,16 @@ class VehicleDetector:
             if not ret:
                 break
 
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # convert BGR to RGB
 
-            fgmask = self.backgroundObject.apply(rgb_frame)
+            fgmask = self.backgroundObject.apply(rgb_frame)  # extract foreground mask
+
+            # apply morphological operations on fgmask:
             _, fgmask = cv2.threshold(fgmask, 20, 255, cv2.THRESH_BINARY)
             fgmask = cv2.erode(fgmask, self.kernel, iterations=1)
             fgmask = cv2.dilate(fgmask, self.kernel2, iterations=6)
 
+            # detect contours on the foreground mask
             contours, _ = cv2.findContours(
                 fgmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
             )
@@ -101,6 +142,7 @@ class VehicleDetector:
                         (x, int((y + y + h) // 2)),
                     ]
 
+                    # check if object bbox is inside polygon
                     if any(
                         cv2.pointPolygonTest(self.pts_int, corner, False) >= 0
                         for corner in rect_corners
@@ -108,48 +150,55 @@ class VehicleDetector:
                         cv2.pointPolygonTest(self.pts_int, edge, False) >= 0
                         for edge in rect_edges
                     ):
-                        # print(len(track_boxes))
+                        # if time_ranges is empty, add first range
                         if not self.time_ranges:
                             self.time_ranges[0] = {
                                 "start": self.frame_number,
                                 "end": self.frame_number,
                             }
-                            track_boxes.append((x,y,w,h))
+                            track_boxes.append((x, y, w, h))
 
-                        t_n = max(self.time_ranges.keys())
+                        t_n = max(
+                            self.time_ranges.keys()
+                        )  # get number of the latest range in time_ranges
 
-                        if self.time_ranges[t_n]['end'] == self.frame_number-1:
-                            self.time_ranges[t_n]['end'] = self.frame_number
+                        # check if there were any objects inside the polygon:
+                        if self.time_ranges[t_n]["end"] == self.frame_number - 1:
+                            self.time_ranges[t_n]["end"] = self.frame_number
                         else:
+                            # check if object stopped inside polygon and disappeared
+                            #   from further foreground masks
                             for t_box in track_boxes:
+                                # IOU threshold is 0.5 to skip inaccuracies of bbox
+                                #   calculations
                                 if calculate_iou(t_box, (x, y, w, h)) >= 0.5:
                                     self.time_ranges[t_n]["end"] = self.frame_number
                                     track_boxes.remove(t_box)
-                                    track_boxes.append((x,y,w,h))
+                                    track_boxes.append((x, y, w, h))
                                 else:
                                     self.time_ranges[t_n + 1] = {
                                         "start": self.frame_number,
                                         "end": self.frame_number,
                                     }
-                                    # print(self.time_ranges)
-                                    # track_boxes.append((x, y, w, h))
 
-                        
-
+            # draw area of interest above image. Needed for algorythm analysis
             cv2.polylines(
                 frame, [self.pts_int], isClosed=True, color=(0, 255, 0), thickness=2
             )
 
+            # uncomment below to draw frames when running script:
             # cv2.imshow("Output", frame)
 
-            # if self.write_frames:
-            # output_folder = "frames"
-            # frame_filename = f"{output_folder}/frame_{self.frame_number}.jpg"
-            # cv2.imwrite(frame_filename, frame)
+            # if write_frames is True, save frames with bboxes and polygon
+            if self.write_frames:
+                output_folder = "frames"
+                frame_filename = f"{output_folder}/frame_{self.frame_number}.jpg"
+                cv2.imwrite(frame_filename, frame)
 
-            # print(self.frame_number)
+            # increment frame number
             self.frame_number += 1
 
+            # leave while loop at the end of the video
             if cv2.waitKey(1) == 27:
                 break
 
@@ -157,7 +206,13 @@ class VehicleDetector:
         self.cap.release()
         cv2.destroyAllWindows()
 
+
 def merge_intervals(intervals):
+    '''
+    Merge time intervals in list together, if beginning of one interval is equal
+        to the end of another interval or equal to end + 1.
+        For example [[18,20], [20,35]] -> [[18, 35]] 
+    '''
     if not intervals:
         return []
 
@@ -178,7 +233,11 @@ def merge_intervals(intervals):
 
     return merged_intervals
 
+
 def update_dict(dictionary, old_frame, old_coordinates, new_frame, new_coordinates):
+    '''
+    Update dictionary key or value, or both
+    '''
     if old_frame in dictionary:
         # If the old_frame is present in the dictionary, find and replace the old_coordinates with new_coordinates
         coordinates_list = dictionary[old_frame]
@@ -197,6 +256,9 @@ def update_dict(dictionary, old_frame, old_coordinates, new_frame, new_coordinat
 
 
 def calculate_iou(rect1, rect2):
+    '''
+    Calculate Intersection over Union for two rectangles
+    '''
     x1, y1, w1, h1 = rect1
     x2, y2, w2, h2 = rect2
 
@@ -221,10 +283,12 @@ def calculate_iou(rect1, rect2):
 
 
 def main():
+    '''
+    Main function parsing arguments and running functions in appropriate order
+    '''
     parser = argparse.ArgumentParser(description="Vehicle Detection Script")
     parser.add_argument("video_file", help="Path to the video file")
     parser.add_argument("polygon_file", help="Path to the polygon file")
-    # parser.add_argument('output_json', help='Filename for output JSON')
 
     args = parser.parse_args()
 
