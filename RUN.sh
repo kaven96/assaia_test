@@ -52,6 +52,8 @@ python3 evaluate.py "$gt_intervals" final_output_result.json
 # move results file to the output_path
 mv final_output_result.json "$output_path"
 
+rm output_result.json
+
 # print resulting metrics
 echo "$(cat metrics_all.txt)"
 
