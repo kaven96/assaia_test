@@ -88,3 +88,15 @@
 ```
 bash RUN.sh <path_to_video_file> <path_to_polygons.json> <path_to_save_output.json> <path_to_ground_truth.json>
 ```
+
+Если нужно запустить предыдущие версии модели, то:
+
+```
+bash RUN_haar.sh <path_to_video_file> <path_to_polygons.json> <path_to_save_output.json> <path_to_ground_truth.json>
+```
+
+или
+
+```
+bash RUN_owl.sh <path_to_video_file> <path_to_polygons.json> <path_to_save_output.json> <path_to_ground_truth.json>
+```

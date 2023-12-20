@@ -3,6 +3,9 @@ import argparse
 
 
 class TimeIntervalEvaluator:
+    '''
+    
+    '''
     def __init__(self, ground_truth, prediction):
         self.ground_truth = self.load_json(ground_truth)
         self.prediction = self.load_json(prediction)
