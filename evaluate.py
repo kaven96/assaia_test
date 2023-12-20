@@ -4,7 +4,12 @@ import argparse
 
 class TimeIntervalEvaluator:
     '''
-    
+    True positive is length of all intersections divided by length of all ground truth 
+        intervals.
+    False positive is length of parts of predicted ranges not intersecting ground truth 
+        ranges divided by by length of all ground truth intervals.
+    False negative is the length of parts of ground truth ranges that are not 
+        intersecting with predicted ranges divided by length of all ground truth intervals
     '''
     def __init__(self, ground_truth, prediction):
         self.ground_truth = self.load_json(ground_truth)
@@ -29,6 +34,7 @@ class TimeIntervalEvaluator:
         false_positive_length = 0
         false_negative_length = 0
 
+        # calculate intersection of intervals in gt and predicted
         for predicted_interval in predicted_intervals:
             for gt_interval in ground_truth_intervals:
                 intersection_start = max(predicted_interval[0], gt_interval[0])
@@ -37,6 +43,7 @@ class TimeIntervalEvaluator:
                 if intersection_start < intersection_end:
                     intersection_length += intersection_end - intersection_start
 
+        # calculate extra length of prediction
         false_positive_length = (
             sum(
                 [
@@ -46,6 +53,8 @@ class TimeIntervalEvaluator:
             )
             - intersection_length
         )
+
+        # calculate extra length of ground truth
         false_negative_length = (
             sum(
                 [
@@ -61,6 +70,14 @@ class TimeIntervalEvaluator:
         self.false_negative_lengths.append(false_negative_length)
 
     def calculate_all_metrics(self):
+        '''
+        TP, FP, FN are not interesting by themselves. 
+        Their proportions are more interesting, so we will use popular metrics for it:
+        - precision
+        - recall
+        - accuracy
+        - f1
+        '''
         for video_name in self.prediction.keys():
             self.calculate_metrics(video_name)
 
