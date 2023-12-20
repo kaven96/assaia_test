@@ -1,16 +1,17 @@
 import os
+import argparse
 from detect5 import VehicleDetector
 import json
 
 
-def process_videos(video_list):
+def process_videos(video_list, polygons_path):
     results_dict = {}
 
     for video_name in video_list:
         print(f"Processing video: {video_name}")
         detector = VehicleDetector(
             video_name,
-            "polygons.json",
+            polygons_path,
             write_frames=False,
         )
         detector.load_video()
@@ -26,11 +27,32 @@ def process_videos(video_list):
         json.dump(results_dict, json_file)
 
 
+def main():
+    parser = argparse.ArgumentParser(description="Process videos and polygons file.")
+    parser.add_argument(
+        "video_list",
+        help="Path to the video file or folder containing video files.",
+    )
+    parser.add_argument(
+        "polygons_path",
+        help="Path to the polygons file.",
+    )
+    args = parser.parse_args()
+
+    if os.path.isdir(args.video_list):
+        video_list = [
+            os.path.join(args.video_list, video)
+            for video in os.listdir(args.video_list)
+            if video.endswith(".mp4")
+        ]
+    elif os.path.isfile(args.video_list) and args.video_list.endswith(".mp4"):
+        video_list = [args.video_list]
+    else:
+        print("Invalid input. Please provide a valid video file or folder for input 1.")
+        return
+
+    process_videos(video_list, args.polygons_path)
+
+
 if __name__ == "__main__":
-    video_folder = "videos"  
-    video_list = [
-        f"{video_folder}/{video}"
-        for video in os.listdir(video_folder)
-        if video.endswith(".mp4")
-    ]
-    process_videos(video_list)
+    main()
