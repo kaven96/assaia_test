@@ -77,5 +77,5 @@
 Для установки зависимостей, обработки одного видео, либо всех видео в директории, вычисления метрик необходимо запустить:
 
 ```
-bash RUN.sh <path_to_video_file> <path_to_polygons.json> <path_to_save_output.json>
+bash RUN.sh <path_to_video_file> <path_to_polygons.json> <path_to_save_output.json> <path_to_ground_truth.json>
 ```
