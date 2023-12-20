@@ -2,3 +2,4 @@ venv/
 .vscode/
 videos
 deps_installed
+__pycache__/
